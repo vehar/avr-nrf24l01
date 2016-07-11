@@ -321,7 +321,18 @@ uint8_t get_iffbw_lut(double in,double H)
 	return 142;
 }
 
-int spi_transfer(uint8_t * buf,int len, int cs_before,int cs_after)
+int h2b(char in)
+{
+	if( (in>='0')&&(in<='9') )
+		return in-'0';
+	if( (in>='a')&&(in<='f') )
+		return in-'a'+10;
+	if( (in>='A')&&(in<='F') )
+		return in-'A'+10;
+	return 0;	
+}
+
+int spi_transfer(uint8_t * buf,int len, int cs)
 {
 	if(len>2)
 		return -1;
@@ -330,7 +341,7 @@ int spi_transfer(uint8_t * buf,int len, int cs_before,int cs_after)
 		USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN,
 		SPI_TRANS,//int request
 		(len>0)?(buf[0]|((len>1)?(buf[1]<<8):0)):0,//int value
-		(cs_before?SPI_CS_BEFORE:0)|(cs_after?SPI_CS_AFTER:0)|(0<<8),//int index
+		cs,//int index
 		(char*)buf,//char *bytes
 		len,//int size
 		5000);//int timeout
@@ -342,7 +353,7 @@ int set_reg(uint8_t reg, uint8_t data)
 	uint8_t buf[2];
 	buf[0]=reg |0x80;
 	buf[1]=data;
-	return spi_transfer(buf,2,0,1);
+	return spi_transfer(buf,2,SPI_CS_AFTER);
 }
 
 int get_reg(uint8_t reg)
@@ -350,36 +361,60 @@ int get_reg(uint8_t reg)
 	uint8_t buf[2];
 	buf[0]=reg &0x7f;
 	buf[1]=0;
-	if(spi_transfer(buf,2,0,1)==2)
+	if(spi_transfer(buf,2,SPI_CS_AFTER)==2)
 		return buf[1];
 	else
 		return -1;
 }
 
-int burst_read(uint8_t * buf, int len, int cs_before,int cs_after)
+int burst_read(uint8_t * buf, int len, int cs)
 {
 	return usb_control_msg(
 		handle,
 		USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN,
 		SPI_BURST,//int request
 		0,//int value
-		(cs_before?SPI_CS_BEFORE:0)|(cs_after?SPI_CS_AFTER:0),//int index
+		cs,//int index
 		(char*)buf,//char *bytes
 		len,//int size
 		5000);//int timeout
 }
 
-int burst_write(uint8_t * buf, int len, int cs_before,int cs_after)
+int burst_write(uint8_t * buf, int len, int cs)
 {
 	return usb_control_msg(
 		handle,
 		USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
 		SPI_BURST,//int request
 		0,//int value
-		(cs_before?SPI_CS_BEFORE:0)|(cs_after?SPI_CS_AFTER:0),//int index
+		cs,//int index
 		(char*)buf,//char *bytes
 		len,//int size
 		5000);//int timeout
+}
+
+int nget_reg(uint8_t reg,int ce)
+{
+	int cnt=0;
+	uint8_t buf[2];
+	buf[0]=reg&0x1f;
+	buf[1]=0xff;
+	if((cnt=spi_transfer(buf,2,SPI_CS_AFTER|SPI_CS2|(ce?SPI_CE:0)))==2)
+		return buf[1];
+	else
+		return -1;
+}
+
+int nset_reg(uint8_t reg,uint8_t val,int ce)
+{
+	int cnt=0;
+	uint8_t buf[2];
+	buf[0]=0x20|(reg&0x1f);
+	buf[1]=val;
+	if((cnt=spi_transfer(buf,2,SPI_CS_AFTER|SPI_CS2|(ce?SPI_CE:0)))==2)
+		return 0;
+	else
+		return -1;
 }
 
 
@@ -395,7 +430,7 @@ H_NEW(sidump,"	\"sidump\"			dump all si443x regs\n")
 			buf[0]=k&0x7f;
 			buf[1]=0;
 			int cnt;
-			if((cnt=spi_transfer(buf,2,0,1))==2)
+			if((cnt=spi_transfer(buf,2,SPI_CS_AFTER))==2)
 				printf("[%02x]=%02x\n",k,buf[1]);
 			else
 				printf("err=%d\n",cnt);
@@ -434,7 +469,7 @@ H_NEW(set,"	\"set reg data\"			set si443x register\n")
 		buf[0]=(reg&0x7f)|0x80;
 		buf[1]=value;
 		int cnt;
-		if((cnt=spi_transfer(buf,2,0,1))==2)
+		if((cnt=spi_transfer(buf,2,SPI_CS_AFTER))==2)
 			printf("set [%02x]=%02x, result: %02x %02x\n",reg,value,buf[0],buf[1]);
 		else
 			printf("err=%d\n",cnt);
@@ -468,7 +503,7 @@ H_NEW(get,"	\"get reg\"			get si443x register\n")
 		buf[0]=reg&0x7f;
 		buf[1]=0;
 		int cnt;
-		if((cnt=spi_transfer(buf,2,0,1))==2)
+		if((cnt=spi_transfer(buf,2,SPI_CS_AFTER))==2)
 			printf("[%02x]=%02x\n",reg,buf[1]);
 		else
 			printf("err=%d\n",cnt);
@@ -974,8 +1009,8 @@ H_NEW(txpk,"	\"txpk 010203a0a1...\n")
 				buf[k/2]=m<<4;
 		}
 		uint8_t bb=0xff;
-		spi_transfer(&bb,1,0,0);
-		burst_write(buf,ln/2,0,1);
+		spi_transfer(&bb,1,0);
+		burst_write(buf,ln/2,SPI_CS_AFTER);
 		set_reg(0x05,0x40);
 		set_reg(0x06,0x00);
 		printf("status=%02x %02x\n",get_reg(0x03),get_reg(0x04));
@@ -1033,8 +1068,8 @@ H_NEW(rxpk,"	\"rxpk len\n")
 		printf("rssi=%02x/%02x ",get_reg(0x26),irssi);
 		uint8_t * buf=malloc(ln);
 		uint8_t rn=0x7f;
-		spi_transfer(&rn,1,0,0);
-		burst_read(buf,ln,0,1);
+		spi_transfer(&rn,1,0);
+		burst_read(buf,ln,SPI_CS_AFTER);
 		for(k=0;k<ln;k++)
 		{
 			printf("%02x",buf[k]);
@@ -1103,8 +1138,8 @@ H_NEW(trxpk,"	\"trxpk len to - rx with timeout (bytes,ms)\n")
 		printf("rssi=%02x/%02x ",get_reg(0x26),irssi);
 		uint8_t * buf=malloc(ln);
 		uint8_t rn=0x7f;
-		spi_transfer(&rn,1,0,0);
-		burst_read(buf,ln,0,1);
+		spi_transfer(&rn,1,0);
+		burst_read(buf,ln,SPI_CS_AFTER);
 		for(k=0;k<ln;k++)
 		{
 			printf("%02x",buf[k]);
@@ -1709,6 +1744,314 @@ H_NEW(resp,"	\"resp 0/1\"			set auto responder\n")
 H_MERGE(resp)
 
 #endif
+
+/*-----------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------*/
+
+#ifndef HOOKS_INIT
+
+
+H_NEW(nset,"	\"ns reg data\"			set nrf24l01+ register\n")
+{
+	if(strcasecmp(argv[*argp], "ns") == 0)
+	{
+		int reg=-1;
+		int value=-1;
+		READ_PARAM("%i",reg,"nset");
+		READ_PARAM("%i",value,"nset");
+		++ *argp;
+		uint8_t buf[2];
+		buf[0]=(reg&0x1f)|0x20;
+		buf[1]=value;
+		int cnt;
+		if((cnt=spi_transfer(buf,2,SPI_CS_AFTER|SPI_CS2))==2)
+			printf("nset [%02x]=%02x, result: %02x %02x\n",reg,value,buf[0],buf[1]);
+		else
+			printf("err=%d\n",cnt);
+		return 0;
+	}
+	return 2;
+}
+
+
+#else
+
+H_MERGE(nset)
+
+#endif
+
+/*-----------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------*/
+
+#ifndef HOOKS_INIT
+
+
+
+H_NEW(nget,"	\"ng reg\"			get nrf24l01 register\n")
+{
+	if(strcasecmp(argv[*argp], "ng") == 0)
+	{
+		int reg=-1;
+		READ_PARAM("%i",reg,"nget");
+		++ *argp;
+		uint8_t buf[2];
+		buf[0]=reg&0x7f;
+		buf[1]=0;
+		int cnt;
+		if((cnt=spi_transfer(buf,2,SPI_CS_AFTER|SPI_CS2))==2)
+			printf("[%02x]=%02x\n",reg,buf[1]);
+		else
+			printf("err=%d\n",cnt);
+		return 0;
+	}
+	return 2;
+}
+
+
+#else
+
+H_MERGE(nget)
+
+#endif
+
+
+/*-----------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------*/
+
+#ifndef HOOKS_INIT
+
+
+H_NEW(nsetb,"	\"nsb reg data\"			set nrf24l01+ register block\n")
+{
+	if(strcasecmp(argv[*argp], "nsb") == 0)
+	{
+		int reg=-1;
+		char * b;
+		READ_PARAM("%i",reg,"nset");
+		READ_STR(b,"nset");
+		++ *argp;
+		uint8_t buf[2];
+		uint8_t b2[32];
+		int ll=strlen(b);
+		int l2=ll/2;
+		if(ll%2)
+		{
+			printf("invalid data\n");
+			return 1;
+		}
+		int k;
+		for(k=0;k<l2;k++)
+		{
+			b2[k]=h2b(b[k*2+1])|(h2b(b[k*2])<<4);
+		}
+		buf[0]=(reg&0x1f)|0x20;
+		int cnt;
+		if((cnt=spi_transfer(buf,1,SPI_CS2))!=1)
+		{
+			printf("err=%d\n",cnt);
+			return 1;
+		}
+		if((cnt=burst_write(b2,l2,SPI_CS_AFTER|SPI_CS2))!=l2)
+		{
+			printf("err=%d\n",cnt);
+			return 1;
+		}
+		return 0;
+	}
+	return 2;
+}
+
+
+#else
+
+H_MERGE(nsetb)
+
+#endif
+
+/*-----------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------*/
+
+#ifndef HOOKS_INIT
+
+
+H_NEW(ngetb,"	\"ngb reg n\"			get nrf24l01 register\n")
+{
+	if(strcasecmp(argv[*argp], "ngb") == 0)
+	{
+		int reg=-1;
+		int n=0;
+		READ_PARAM("%i",reg,"nget");
+		READ_PARAM("%i",n,"nget");
+		++ *argp;
+		uint8_t buf[2];
+		uint8_t b2[32];
+		if(n>32)
+		{
+			printf("ngb: invalid count:%d\n",n);
+			return 1;
+		}
+		buf[0]=reg;
+		buf[1]=0;
+		int cnt;
+		if((cnt=spi_transfer(buf,1,SPI_CS2))!=1)
+			printf("err=%d\n",cnt);
+		if((cnt=burst_read(b2,n,SPI_CS_AFTER|SPI_CS2))!=n)
+			printf("err=%d\n",cnt);
+		int k;
+		for(k=0;k<cnt;k++)
+			printf("%02x",b2[k]);
+		printf("\n");
+		return 0;
+	}
+	return 2;
+}
+
+
+#else
+
+H_MERGE(ngetb)
+
+#endif
+
+
+#ifndef HOOKS_INIT
+
+
+H_NEW(nrx,"	\"nrx loop\"			nrf24l01 rx payload\n")
+{
+	if(strcasecmp(argv[*argp], "nrx") == 0)
+	{
+		int loop=0;
+		READ_PARAM("%i",loop,"nrx");
+		++ *argp;
+		uint8_t buf[2];
+		uint8_t b2[32];
+		int len=0;
+		nset_reg(l01_config,nget_reg(l01_config,0)|L01_PWR_UP|L01_PRIM_RX,1);
+		do{
+			//wake in rx mode
+			int st=0;
+			while((nget_reg(l01_fifo_status,1)&L01_RX_EMPTY)==1);
+			st=nget_reg(l01_status,1);
+			nset_reg(l01_status,0xff,1);
+			int pipeno=(st&L01_RX_P_NO_MASK)>>L01_RX_P_NO_OFS;
+			if(pipeno==7)
+			{
+				printf("nrx: rx fifo empty\n");
+				if(loop)
+					continue;
+				else
+					return 1;
+			}
+			if(nget_reg(l01_feature,1)&L01_EN_DPL)
+			{
+				buf[0]=l01_r_rx_pl_wid;
+				buf[1]=0xff;
+				if(spi_transfer(buf,2,SPI_CS_AFTER|SPI_CS2|SPI_CE)!=2)
+				{
+					printf("nrx: error getting pl len\n");
+					return 1;
+				}
+				len=buf[1];
+				if(len>32)
+				{
+					printf("nrx: invalid pl len\n");
+					buf[0]=l01_flush_rx;
+					spi_transfer(buf,1,SPI_CS_AFTER|SPI_CS2|SPI_CE);
+				}
+			}else{
+				len=nget_reg(l01_rx_pw_p0+pipeno,1);
+			}
+			buf[0]=l01_r_rx_payload;
+			buf[1]=0;
+			int cnt;
+			if((cnt=spi_transfer(buf,1,SPI_CS2|SPI_CE))!=1)
+				printf("err=%d\n",cnt);
+			if((cnt=burst_read(b2,len,SPI_CS_AFTER|SPI_CS2|SPI_CE))!=len)
+				printf("err=%d\n",cnt);
+			int k;
+			for(k=0;k<cnt;k++)
+				printf("%02x",b2[k]);
+			printf("\n");
+			fflush(stdout);
+		}while(loop);
+		return 0;
+	}
+	return 2;
+}
+
+
+#else
+
+H_MERGE(nrx)
+
+#endif
+
+/*-----------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------*/
+/*-----------------------------------------------------------------------------------*/
+
+#ifndef HOOKS_INIT
+
+
+H_NEW(ntx,"	\"ntx data\"			nrf24l01+ tx data\n")
+{
+	if(strcasecmp(argv[*argp], "ntx") == 0)
+	{
+		char * b;
+		READ_STR(b,"ntx");
+		++ *argp;
+		uint8_t buf[2];
+		uint8_t b2[32];
+		int ll=strlen(b);
+		int l2=ll/2;
+		if(ll%2)
+		{
+			printf("invalid data\n");
+			return 1;
+		}
+		int k;
+		int cnt;
+		for(k=0;k<l2;k++)
+		{
+			b2[k]=h2b(b[k*2+1])|(h2b(b[k*2])<<4);
+		}
+		buf[0]=l01_flush_tx;
+		if((cnt=spi_transfer(buf,1,SPI_CS_AFTER|SPI_CS2))!=1)
+		{
+			printf("err=%d\n",cnt);
+			return 1;
+		}
+		nset_reg(l01_status,0xff,0);
+		buf[0]=l01_w_tx_payload;
+		nset_reg(l01_config,L01_PWR_UP,0);
+		if((cnt=spi_transfer(buf,1,SPI_CS2))!=1)
+		{
+			printf("err=%d\n",cnt);
+			return 1;
+		}
+		if((cnt=burst_write(b2,l2,SPI_CS_AFTER|SPI_CS2|SPI_CE))!=l2)
+		{
+			printf("err=%d\n",cnt);
+			return 1;
+		}
+		return 0;
+	}
+	return 2;
+}
+
+
+#else
+
+H_MERGE(ntx)
+
+#endif
+
+
 
 
 

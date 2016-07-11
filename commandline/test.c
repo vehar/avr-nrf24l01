@@ -37,7 +37,7 @@ respectively.
 
 #include "../firmware/requests.h"   /* custom request numbers */
 #include "../firmware/usbconfig.h"  /* device's VID/PID and names */
-
+#include "../nrf24l01_regs.h"
 usb_dev_handle      *handle = NULL;
 static struct termios old;
 

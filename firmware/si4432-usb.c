@@ -53,6 +53,9 @@ different port or bit, change the macros below:
 #define LED0_ON() DDRD|=(1<<4)
 #define LED0_OFF() DDRD&=~(1<<4)
 
+#define N_CS(x) if(x)PORTC|=(1<<1);else PORTC&=~(1<<1)
+#define N_CE(x) if(x)PORTC|=(1<<0);else PORTC&=~(1<<0)
+
 #define GET_nIRQ() (PINB & (1<<1))
 #define SET_SDN(x) if(x)PORTD|=(1<<5);else PORTD&=~(1<<5)
 
@@ -193,7 +196,14 @@ usbMsgLen_t usbFunctionSetup(uchar data[8])
 		case SPI_TRANS:
 			if(rq->bmRequestType&USBRQ_DIR_DEVICE_TO_HOST)
 			{
-				SI_CS(rq->wIndex.bytes[0]&SPI_CS_BEFORE);
+				if(rq->wIndex.bytes[0]&SPI_CS2)
+				{
+					SI_CS(1);
+					N_CS(rq->wIndex.bytes[0]&SPI_CS_BEFORE);
+				}else{
+					N_CS(1);
+					SI_CS(rq->wIndex.bytes[0]&SPI_CS_BEFORE);
+				}
 				if(rq->wLength.bytes[0]>0)
 				{
 					SPDR=rq->wValue.bytes[0];
@@ -206,14 +216,25 @@ usbMsgLen_t usbFunctionSetup(uchar data[8])
 						replyBuffer[1]=SPDR;
 					}
 				}
-				SI_CS(rq->wIndex.bytes[0]&SPI_CS_AFTER);
+				if(rq->wIndex.bytes[0]&SPI_CS2)
+					N_CS(rq->wIndex.bytes[0]&SPI_CS_AFTER);
+				else
+					SI_CS(rq->wIndex.bytes[0]&SPI_CS_AFTER);
+				N_CE(rq->wIndex.bytes[0]&SPI_CE);
 				return rq->wLength.bytes[0];
 			}else{
 				return 0;
 			}
 		case SPI_BURST:
-			SI_CS(rq->wIndex.bytes[0]&SPI_CS_BEFORE);
-			burst_cs_after=(rq->wIndex.bytes[0]&SPI_CS_AFTER);
+			if(rq->wIndex.bytes[0]&SPI_CS2)
+			{
+				SI_CS(1);
+				N_CS(rq->wIndex.bytes[0]&SPI_CS_BEFORE);
+			}else{
+				N_CS(1);
+				SI_CS(rq->wIndex.bytes[0]&SPI_CS_BEFORE);
+			}
+			burst_cs_after=rq->wIndex.bytes[0];
 			bLength=rq->wLength.word;
 			return USB_NO_MSG;
 		case CUSTOM_RXTXRX:
@@ -323,7 +344,11 @@ uint8_t usbFunctionRead(uint8_t * data, uint8_t len)
 			}
 			if(!bLength)
 			{
-				SI_CS(burst_cs_after);
+				if(burst_cs_after&SPI_CS2)
+					N_CS(burst_cs_after&SPI_CS_AFTER);
+				else
+					SI_CS(burst_cs_after&SPI_CS_AFTER);
+				N_CE(burst_cs_after&SPI_CE);
 			}
 			return k;
 		case CUSTOM_RXTXRX:
@@ -382,11 +407,11 @@ uint8_t usbFunctionWrite(uint8_t * data, uint8_t len)
 				bLength--;
 				if(!bLength)
 				{
-					if(burst_cs_after)
-						PORTB|=(1<<PB2);
+					if(burst_cs_after&SPI_CS2)
+						N_CS(burst_cs_after&SPI_CS_AFTER);
 					else
-						PORTB&=~(1<<PB2);
-					break;
+						SI_CS(burst_cs_after&SPI_CS_AFTER);
+					N_CE(burst_cs_after&SPI_CE);
 				}
 			}
 			if(bLength==0)
@@ -611,7 +636,7 @@ uchar   i;
 	REGW(si_sync1,0x21);
 	REGW(si_sync0,0xff);
 	REGW(si_data_access_contorl,si_enpacrx|si_enpactx|si_encrc|si_crc16);
-	start_responder();
+	//start_responder();
  	set_sleep_mode(SLEEP_MODE_IDLE);
     usbDeviceConnect();
     sei();

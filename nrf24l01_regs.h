@@ -59,12 +59,12 @@
 #define L01_RF_DR_250K (L01_RF_DR_LOW)
 
 #define l01_status 0x07
-#define L01_RX_DR   (1<<6)
-#define L01_TX_DS   (1<<5)
-#define L01_MAX_RT  (1<<4)
+#define L01_RX_DR    (1<<6)
+#define L01_TX_DS    (1<<5)
+#define L01_MAX_RT   (1<<4)
 #define L01_RX_P_NO_MASK 0x0e
 #define L01_RX_P_NO_OFS 1
-#define L01_TX_FULL (1<<0)
+#define L01_TX_FULLS (1<<0)
 
 #define l01_observe_tx 0x08
 #define L01_PLOS_CNT_MASK 0xf0
@@ -112,7 +112,7 @@
 #define l01_r_register          0x00
 #define l01_w_register          0x20
 #define l01_r_rx_payload        0x61
-#define l01_w_rx_payload        0xa0
+#define l01_w_tx_payload        0xa0
 #define l01_flush_rx            0xe2
 #define l01_flush_tx            0xe1
 #define l01_reuse_tx_pl         0xe3
