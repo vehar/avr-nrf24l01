@@ -233,59 +233,59 @@ void main(void)
     for(;;)
     {                /* main event loop */
 		radioPoll();
-		LED0_ON();
 		usbPoll();
+		uint8_t found=((reportBuffer.dx!=0)||(reportBuffer.dy!=0));
+		reportBuffer.dx=reportBuffer.dy=0;
+		int8_t dx=dxr/256;
+		int8_t dy=dyr/256;
+		if(dx>127)
+		{
+			reportBuffer.dx=127;
+			dxr-=127*256;
+			found=1;
+		}else if(dx<-127)
+		{
+			reportBuffer.dx=-127;
+			dxr+=127*256;
+			found=1;
+		}else{
+			reportBuffer.dx=dx;
+			dxr-=dx*256;
+			found|=(reportBuffer.dx!=0);
+		}
+		
+		if(dy>127)
+		{
+			reportBuffer.dy=127;
+			dyr-=127*256;
+			found=1;
+		}else if(dy<-127)
+		{
+			reportBuffer.dy=-127;
+			dyr+=127*256;
+			found=1;
+		}else{
+			reportBuffer.dy=dy;
+			dyr-=dy*256;
+			found|=(reportBuffer.dy!=0);
+		}
+		if(btn!=btn_tmp)
+		{
+			btn=btn_tmp;
+			reportBuffer.buttonMask=(btn?0:1);
+			found=1;
+		}
+		LED0_OFF();
 		if(usbInterruptIsReady())
 		{
 			/* called after every poll of the interrupt endpoint */
-			uint8_t found=((reportBuffer.dx!=0)||(reportBuffer.dy!=0));
-			reportBuffer.dx=reportBuffer.dy=0;
-			int8_t dx=dxr/256;
-			int8_t dy=dyr/256;
-			if(dx>127)
-			{
-				reportBuffer.dx=127;
-				dxr-=127*256;
-				found=1;
-			}else if(dx<-127)
-			{
-				reportBuffer.dx=-127;
-				dxr+=127*256;
-				found=1;
-			}else{
-				reportBuffer.dx=dx;
-				dxr-=dx*256;
-				found|=(reportBuffer.dx!=0);
-			}
-			
-			if(dy>127)
-			{
-				reportBuffer.dy=127;
-				dyr-=127*256;
-				found=1;
-			}else if(dy<-127)
-			{
-				reportBuffer.dy=-127;
-				dyr+=127*256;
-				found=1;
-			}else{
-				reportBuffer.dy=dy;
-				dyr-=dy*256;
-				found|=(reportBuffer.dy!=0);
-			}
-			if(btn!=btn_tmp)
-			{
-				btn=btn_tmp;
-				reportBuffer.buttonMask=(btn?0:1);
-				found=1;
-			}
 			if(found)
 			{
 				
+				LED0_ON();
 				usbSetInterrupt((void *)&reportBuffer, sizeof(reportBuffer));
 			}
 		}
-		LED0_OFF();
     };
 }
 
