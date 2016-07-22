@@ -25,10 +25,10 @@
 #undef i2c_SDA_BIT
 #undef i2c_SCL_BIT
 
-#define ADXL_I2C_PREFIX ac
-#include "../adxl345.h"
-#undef ADXL_I2C_PREFIX
-#define ADXL 0x53
+#define MPU_I2C_PREFIX ac
+#include "../mpu6050.h"
+#undef MPU_I2C_PREFIX
+#define MPU 104
 
 #define SPI_PORT D
 #define SPI_SCK_BIT 4
@@ -196,6 +196,40 @@ void usart_prshex(uint8_t in)
 	usart_prxchar( in&0x0f);
 }
 
+struct mpu_res_i
+{
+	uint8_t axh,axl,ayh,ayl,azh,azl;
+	uint8_t temph,templ;
+	uint8_t gxh,gxl,gyh,gyl,gzh,gzl;
+};
+
+struct mpu_res_o
+{
+	int16_t ax,ay,az;
+	int16_t temp;
+	int16_t gx,gy,gz;
+};
+
+union mpu_res
+{
+	struct mpu_res_i i;
+	struct mpu_res_o o;
+	uint8_t r[sizeof(struct mpu_res_i)];
+};
+
+#define SW(a) do{ tmp=a##l;a##l=a##h;a##h=tmp;}while(0)
+void mpu_byteswap(union mpu_res * b)
+{
+	uint8_t tmp;
+	SW(b->i.ax);
+	SW(b->i.ay);
+	SW(b->i.az);
+	SW(b->i.temp);
+	SW(b->i.gx);
+	SW(b->i.gy);
+	SW(b->i.gz);
+};
+#undef SW
 
 union buf_t{
 		uint8_t c[4];
@@ -206,13 +240,16 @@ uint8_t diff(uint16_t a, uint16_t b)
 {
 	return (a>b)?(a-b):(b-a);
 }
-#define EBUFSZ 64
+#define EBUFSZ 32
 
 int16_t bufx[EBUFSZ];
 int16_t bufy[EBUFSZ];
 int16_t bufz[EBUFSZ];
 uint8_t bufp;
 int16_t sumx,sumy,sumz;
+
+#define GDIV 8
+#define ADIV 4
 
 void main(void)
 {
@@ -234,49 +271,85 @@ void main(void)
 	N_WR(l01_rf_ch,2);
 	N_WR(l01_setup_retr,0x2f);
 	ac_i2cINIT();
-//	_delay_ms(3000);
-	//164,50,-56
-	adxl345_write(ADXL,adxl345_power_ctl,0);
-	adxl345_write(ADXL,adxl345_bw_rate,0x0b);
-	adxl345_write(ADXL,adxl345_ofsx,157/4);
-	adxl345_write(ADXL,adxl345_ofsy,48/4);
-	adxl345_write(ADXL,adxl345_ofsz,-76/4);
-/*	adxl345_write(ADXL,adxl345_ofsx,0);
-	adxl345_write(ADXL,adxl345_ofsy,0;
-	adxl345_write(ADXL,adxl345_ofsz,0);*/
-	//268,265,273
-	adxl345_write(ADXL,adxl345_fifo_ctl,ADXL345_FIFO_FIFO|16);
-	adxl345_write(ADXL,adxl345_power_ctl,ADXL345_MEASURE);
+	_delay_ms(3000);
+/*	for(k=0;k<128;k++)
+	{
+		ac_i2cSTART();
+		if(ac_i2cTX(k<<1))
+			usart_pruint(k,0);
+		ac_i2cSTOP();
+	}*/
+	ac_i2cSTART();
+	ac_i2cTX((MPU<<1)|1);
+	for(k=0;k<0x76;k++)
+	{
+		usart_prshex(k);usart_prchar('=');
+		usart_prshex(ac_i2cRX(1));
+		usart_prchar(13);usart_prchar(10);
+	}
+	ac_i2cSTOP();
 	usart_prchar(13);usart_prchar(10);
-	usart_prshex(adxl345_read(ADXL,adxl345_data_format));
+	
+	mpu_write(MPU,mpu_pwr_mgmt_1,MPU_DEVICE_RESET);
+	while(mpu_read(MPU,mpu_pwr_mgmt_1)&MPU_DEVICE_RESET);
+	mpu_write(MPU,mpu_pwr_mgmt_1,MPU_CLK_GY);
+	mpu_write(MPU,mpu_gyro_config,MPU_FS_2K);
+	usart_prchar('R');
+	usart_prchar(13);usart_prchar(10);
+	
+	union mpu_res r;
+	int32_t tofsx=0;
+	int32_t tofsy=0;
+	int32_t tofsz=0;
+	for(k=0;k<EBUFSZ;k++)
+	{
+		mpu_read_m(MPU,mpu_accel_xout_h,r.r,sizeof(r));
+		mpu_byteswap(&r);
+		usart_prchar('a');usart_prchar('x');usart_prchar('=');usart_print(r.o.ax,5);usart_prchar(' ');
+		usart_prchar('a');usart_prchar('y');usart_prchar('=');usart_print(r.o.ay,5);usart_prchar(' ');
+		usart_prchar('a');usart_prchar('z');usart_prchar('=');usart_print(r.o.az,5);usart_prchar(' ');
+	
+		usart_prchar('a');usart_prchar('t');usart_prchar('=');usart_print(r.o.temp,5);usart_prchar(' ');
+	
+		usart_prchar('g');usart_prchar('x');usart_prchar('=');usart_print(r.o.gx/GDIV,5);usart_prchar(' ');
+		usart_prchar('g');usart_prchar('y');usart_prchar('=');usart_print(r.o.gy/GDIV,5);usart_prchar(' ');
+		usart_prchar('g');usart_prchar('z');usart_prchar('=');usart_print(r.o.gz/GDIV,5);usart_prchar(' ');
+		usart_prchar(13);
+		tofsx+=r.o.gx;
+		tofsy+=r.o.gy;
+		tofsz+=r.o.gz;
+	};
+	usart_prchar(13);usart_prchar(10);
+	usart_prchar('o');usart_prchar('x');usart_prchar('=');usart_print(tofsx/EBUFSZ,5);usart_prchar(' ');
+	usart_prchar('o');usart_prchar('y');usart_prchar('=');usart_print(tofsy/EBUFSZ,5);usart_prchar(' ');
+	usart_prchar('o');usart_prchar('z');usart_prchar('=');usart_print(tofsz/EBUFSZ,5);usart_prchar(' ');
+	usart_prchar(13);usart_prchar(10);
+	int16_t ofsx=tofsx/EBUFSZ;
+	int16_t ofsy=tofsy/EBUFSZ;
+	int16_t ofsz=tofsz/EBUFSZ;
+	
+	
+//	usart_prshex(adxl345_read(ADXL,adxl345_data_format));
 	usart_prchar(13);usart_prchar(10);
 	otx=N_RR(l01_observe_tx);
 	usart_prchar('o');usart_prchar('=');usart_prshex(otx);usart_prchar(' ');
 	while(1)
 	{
-/*		uint8_t buf[0x39];
-		if(adxl345_read_m(ADXL,0,buf,0x39))
-		{
-			usart_prchar('N');usart_prchar(13);usart_prchar(10);
-		}else
-			for(k=0;k<0x39;k++)
-			{
-					usart_prshex(k);usart_prchar('=');usart_prshex(buf[k]);
-					usart_prchar(13);usart_prchar(10);
-			}*/
-		uint8_t nsam=adxl345_read(ADXL,adxl345_fifo_status)&ADXL345_FIFO_ENTRIES_MASK;
-		for(k=0;k<nsam;k++)
-			if(adxl345_read_m(ADXL,adxl345_datx0,buf.c,6)==0)
-			{
-				sumx+=buf.i[0]-bufx[bufp];bufx[bufp]=buf.i[0];
-				sumy+=buf.i[1]-bufy[bufp];bufy[bufp]=buf.i[1];
-				sumz+=buf.i[2]-bufz[bufp];bufz[bufp]=buf.i[2];
-				bufp++;
-				if(bufp>=EBUFSZ)
-					bufp=0;
-			}
-		tb.i[0]=sumx;
-		tb.i[1]=sumy;
+//		uint8_t nsam=adxl345_read(ADXL,adxl345_fifo_status)&ADXL345_FIFO_ENTRIES_MASK;
+		mpu_read_m(MPU,mpu_accel_xout_h,r.r,sizeof(r));
+		mpu_byteswap(&r);
+		sumx-=bufx[bufp];bufx[bufp]=r.o.gx/GDIV;sumx+=bufx[bufp];
+		sumy-=bufy[bufp];bufy[bufp]=r.o.gy/GDIV;sumy+=bufy[bufp];
+		sumz-=bufz[bufp];bufz[bufp]=r.o.gz/GDIV;sumz+=bufz[bufp];
+		tb.i[0]=(r.o.gz-ofsz)/GDIV;
+		tb.i[1]=(r.o.gy-ofsy)/GDIV;
+/*		usart_prchar('g');usart_prchar('z');usart_prchar('=');usart_print(tb.i[0],5);usart_prchar(' ');
+		usart_prchar('g');usart_prchar('y');usart_prchar('=');usart_print(tb.i[1],5);usart_prchar(' ');*/
+		bufp++;
+		if(bufp>=EBUFSZ)
+			bufp=0;
+/*		tb.i[0]=sumx-ofsx;
+		tb.i[1]=sumy-ofsy;*/
 /*		usart_prchar('o');usart_prchar('=');usart_prshex(otx);usart_prchar(' ');
 		usart_prchar('S');usart_prchar('=');usart_print(nsam,5);usart_prchar(' ');usart_prchar(' ');usart_prchar(' ');
 		usart_prchar('x');usart_prchar('=');usart_print(tb.i[0],5);usart_prchar(' ');
@@ -300,6 +373,7 @@ void main(void)
 			N_SPI(l01_flush_tx);
 			N_CS(1);
 			usart_prchar('!');
+			usart_prchar(10);
 		}
 		#define MOVETH 2
 //		if((tb.i[0]>MOVETH)||(tb.i[0]<-MOVETH)||(tb.i[1]>MOVETH)||(tb.i[1]<-MOVETH))
@@ -307,7 +381,7 @@ void main(void)
 		{
 			N_CS(0);
 			N_SPI(l01_w_tx_payload);
-			N_SPI(0x01);
+			N_SPI(0x00);
 			uint8_t k;
 			for(k=0;k<sizeof(buf);k++)
 				N_SPI(tb.c[k]);

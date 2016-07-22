@@ -38,7 +38,7 @@
 #define N_CS(x) if(x) PORTD|=(1<<7);else PORTD&=~(1<<7)
 #define N_CE(x) if(x) PORTB|=(1<<0);else PORTB&=~(1<<0)
 
-#define BTN_GET() (PINC&(1<<5))
+#define BTN_GET() ((PINC&(1<<5))!=0)
 
 
 #define LED0_ON() DDRD|=(1<<4)
@@ -207,7 +207,7 @@ void main(void)
 		{
 			union buf_t tb;
 			tb.i[0]=buf1.i[0]-buf.i[0];
-			tb.i[1]=buf1.i[1]-buf.i[1];
+			tb.i[1]=buf.i[1]-buf1.i[1];
 			btn=btn_tmp;
 /*			buf1.i[0]=buf.i[0];
 			buf1.i[1]=buf.i[1];*/
@@ -239,6 +239,7 @@ void main(void)
 			N_CS(0);
 			N_SPI(l01_w_tx_payload);
 			uint8_t k;
+			N_SPI(0x00);
 			for(k=0;k<sizeof(buf);k++)
 				N_SPI(tb.c[k]);
 			N_SPI(btn);

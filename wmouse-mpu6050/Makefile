@@ -1,9 +1,9 @@
 MCU=atmega8
-CFLAGS+=-Os -Wall  -mmcu=$(MCU) -DF_CPU=16000000
+CFLAGS+=-Os -Wall  -mmcu=$(MCU) -DF_CPU=1000000
 CFLAGS+=-funsigned-bitfields -fpack-struct -fshort-enums 
 CFLAGS+=-Wl,-relax -ffreestanding -fomit-frame-pointer 
 CFLAGS+=-fno-tree-scev-cprop -fno-strict-aliasing 
-#CFLAGS+=-fwhole-program
+CFLAGS+=-fwhole-program
 CFLAGS+= -Wl,-gc-sections -ffunction-sections -fdata-sections -mcall-prologues
 CFLAGS+=-fno-move-loop-invariants -fno-inline-small-functions
 CFLAGS+=-Iusbdrv -I.
@@ -11,11 +11,14 @@ CC=avr-gcc
 LD=avr-ld
 
 
-OBJECTS=usbdrv/usbdrv.o usbdrv/usbdrvasm.o usbdrv/oddebug.o 
+OBJECTS=
 
-NAME=wmouse-usb
+DEPS=../nrf24l01_regs.h softI2C.h genubrr.h softspi.h ../adxl345.h
 
-AVRUSBBOOT=../../../avrusbboot.2006-06-25/software/avrusbboot
+NAME=nrf24le1-jmouse
+
+WR=../../usbtest/from-work/commandline/test
+#WR=../../usbtest/commandline/test
 
 
 
@@ -31,23 +34,20 @@ AVRUSBBOOT=../../../avrusbboot.2006-06-25/software/avrusbboot
 	$(CC) $(CFLAGS) -c -o $@ $<
 .S.o:
 	$(CC) $(CFLAGS) -c -x assembler-with-cpp -o $@ $<
+.c.elf:
+	$(CC) $(CFLAGS) -o $@ $<
 
 
 
-all: clean hidreportsize.h build
+all: build
 clean:
-	rm -f $(OBJECTS) $(NAME).hex $(NAME).bin $(NAME).elf $(NAME).o hidreportsize.h hidreportcheck
+	rm -f *.o *.elf *.s $(NAME).hex $(NAME).bin $(NAME).elf $(NAME).o
 build: $(NAME).bin $(NAME).s
 boot: $(NAME).bin
 	ls -l $(NAME).bin
-	$(AVRUSBBOOT) wb $(NAME).bin
-	$(AVRUSBBOOT) -r
+	$(WR) --spiclk 100 atmega8 erase atmega8 write_flash $(NAME).bin atmega8 verify_flash $(NAME).bin atmega8 run
 
-$(NAME).elf: $(NAME).o $(OBJECTS)
-
-hidreportsize.h: hidreportcheck.c hidreportdescriptor.h
-	gcc -o hidreportcheck hidreportcheck.c
-	./hidreportcheck >hidreportsize.h
+$(NAME).elf: $(NAME).c $(DEPS)
 
 
 
