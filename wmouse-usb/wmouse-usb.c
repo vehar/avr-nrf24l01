@@ -281,7 +281,7 @@ void main(void)
 		if(btn!=btn_tmp)
 		{
 			btn=btn_tmp;
-			reportBuffer1.buttonMask=(btn?0:1);
+			reportBuffer1.buttonMask=btn;
 			foundr=1;
 		}
 /*		reportBuffer1.dx=dxr/64;

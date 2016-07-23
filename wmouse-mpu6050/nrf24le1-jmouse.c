@@ -251,9 +251,22 @@ int16_t sumx,sumy,sumz;
 #define GDIV 4
 #define ADIV 4
 
+
+uint8_t get_btns()
+{
+	return 
+		((PINC&(1<<0))?0:1)|
+		((PINC&(1<<1))?0:2)|
+		((PINB&(1<<2))?0:4)|
+		0;
+};
+
+
+
 void main(void)
 {
-	uint8_t btn=0xff;
+	uint8_t btn=0;
+	uint8_t btn_tmp=0;
 	uint8_t stat=0;
 	uint8_t nrr=0,otx;
 	uint8_t k;
@@ -271,6 +284,8 @@ void main(void)
 	N_WR(l01_rf_ch,2);
 	N_WR(l01_setup_retr,0x2f);
 	ac_i2cINIT();
+	PORTB|=(1<<2);
+	PORTC|=(1<<0)|(1<<1);
 	_delay_ms(3000);
 /*	for(k=0;k<128;k++)
 	{
@@ -343,6 +358,7 @@ void main(void)
 		sumz-=bufz[bufp];bufz[bufp]=r.o.gz/GDIV;sumz+=bufz[bufp];
 		tb.i[0]=(r.o.gz-ofsz)/GDIV;
 		tb.i[1]=(r.o.gy-ofsy)/GDIV;
+		btn_tmp=get_btns();
 /*		usart_prchar('g');usart_prchar('z');usart_prchar('=');usart_print(tb.i[0],5);usart_prchar(' ');
 		usart_prchar('g');usart_prchar('y');usart_prchar('=');usart_print(tb.i[1],5);usart_prchar(' ');*/
 		bufp++;
@@ -376,9 +392,10 @@ void main(void)
 			usart_prchar(10);
 		}
 		#define MOVETH 2
-		if((tb.i[0]>MOVETH)||(tb.i[0]<-MOVETH)||(tb.i[1]>MOVETH)||(tb.i[1]<-MOVETH))
+		if((tb.i[0]>MOVETH)||(tb.i[0]<-MOVETH)||(tb.i[1]>MOVETH)||(tb.i[1]<-MOVETH)||(btn!=btn_tmp))
 //		if(1)
 		{
+			btn=btn_tmp;
 			N_CS(0);
 			N_SPI(l01_w_tx_payload);
 			N_SPI(0x00);
