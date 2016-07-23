@@ -31,13 +31,13 @@ char usbHidReportDescriptor[] = { /* USB report descriptor, size must match usbc
 	0xA1, 0x00,                    //   COLLECTION (Physical)
 	0x05, 0x09,                    //     USAGE_PAGE (Button)
 	0x19, 0x01,                    //     USAGE_MINIMUM
-	0x29, 0x03,                    //     USAGE_MAXIMUM
+	0x29, 0x05,                    //     USAGE_MAXIMUM
 	0x15, 0x00,                    //     LOGICAL_MINIMUM (0)
 	0x25, 0x01,                    //     LOGICAL_MAXIMUM (1)
 	0x75, 0x01,                    //     REPORT_SIZE (1)
-	0x95, 0x03,                    //     REPORT_COUNT (3)
+	0x95, 0x05,                    //     REPORT_COUNT (3)
 	0x81, 0x02,                    //     INPUT (Data,Var,Abs)
-	0x75, 0x05,                    //     REPORT_SIZE (1)
+	0x75, 0x03,                    //     REPORT_SIZE (1)
 	0x95, 0x01,                    //     REPORT_COUNT (5)
 	0x81, 0x03,                    //     INPUT (Const,Var,Abs)
 	0x05, 0x01,                    //     USAGE_PAGE (Generic Desktop)

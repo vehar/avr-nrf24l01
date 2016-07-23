@@ -248,7 +248,7 @@ int16_t bufz[EBUFSZ];
 uint8_t bufp;
 int16_t sumx,sumy,sumz;
 
-#define GDIV 8
+#define GDIV 4
 #define ADIV 4
 
 void main(void)
@@ -376,8 +376,8 @@ void main(void)
 			usart_prchar(10);
 		}
 		#define MOVETH 2
-//		if((tb.i[0]>MOVETH)||(tb.i[0]<-MOVETH)||(tb.i[1]>MOVETH)||(tb.i[1]<-MOVETH))
-		if(1)
+		if((tb.i[0]>MOVETH)||(tb.i[0]<-MOVETH)||(tb.i[1]>MOVETH)||(tb.i[1]<-MOVETH))
+//		if(1)
 		{
 			N_CS(0);
 			N_SPI(l01_w_tx_payload);
