@@ -256,8 +256,8 @@ uint8_t get_btns()
 {
 	return 
 		((PINC&(1<<0))?0:1)|
-		((PINC&(1<<1))?0:2)|
-		((PINB&(1<<2))?0:4)|
+		((PINC&(1<<1))?0:4)|
+		((PINB&(1<<2))?0:2)|
 		0;
 };
 
@@ -356,7 +356,7 @@ void main(void)
 		sumx-=bufx[bufp];bufx[bufp]=r.o.gx/GDIV;sumx+=bufx[bufp];
 		sumy-=bufy[bufp];bufy[bufp]=r.o.gy/GDIV;sumy+=bufy[bufp];
 		sumz-=bufz[bufp];bufz[bufp]=r.o.gz/GDIV;sumz+=bufz[bufp];
-		tb.i[0]=(r.o.gz-ofsz)/GDIV;
+		tb.i[0]=-(r.o.gx-ofsx)/GDIV;
 		tb.i[1]=(r.o.gy-ofsy)/GDIV;
 		btn_tmp=get_btns();
 /*		usart_prchar('g');usart_prchar('z');usart_prchar('=');usart_print(tb.i[0],5);usart_prchar(' ');
